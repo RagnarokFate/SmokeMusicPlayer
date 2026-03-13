@@ -1,0 +1,434 @@
+#pragma kernel Advect
+#pragma kernel Vorticity
+#pragma kernel Jacobi
+#pragma kernel Divergence
+#pragma kernel SubtractGradient
+#pragma kernel InjectDensity
+#pragma kernel InjectVelocity
+#pragma kernel Dissipate
+
+// Fluid properties
+float dt;
+float diff;
+float visc;
+float fadeRate;
+float velocityDissipation;
+float vorticityScale;
+
+// Grid dimensions
+int width;
+int height;
+
+// Textures
+Texture2D<float2> VelocityRead;
+RWTexture2D<float2> VelocityWrite;
+
+Texture2D<float4> DensityRead;
+RWTexture2D<float4> DensityWrite;
+
+Texture2D<float> PressureRead;
+RWTexture2D<float> PressureWrite;
+
+Texture2D<float> DivergenceRead;
+RWTexture2D<float> DivergenceWrite;
+
+// Injection parameters
+float2 injectPos;
+float injectRadius;
+float4 injectColor;
+float2 injectForce;
+
+[numthreads(8,8,1)]
+void Advect (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)width || id.y >= (uint)height) return;
+
+    float2 pos = float2(id.x, id.y) + 0.5;
+    float2 vel = VelocityRead[id.xy];
+
+    // Backtrace (velocity is in pixels per second, so * dt gives pixels per frame)
+    float2 pastPos = pos - vel * dt; 
+
+    // Proper Bilinear Sampling for smooth advection
+    float2 st = pastPos - 0.5;
+    int2 iuv = int2(floor(st));
+    float2 fuv = frac(st);
+
+    // Boundary constraints (clamp to grid edges to prevent blowing out)
+    int2 p00 = clamp(iuv, int2(0, 0), int2(width - 1, height - 1));
+    int2 p10 = clamp(iuv + int2(1, 0), int2(0, 0), int2(width - 1, height - 1));
+    int2 p01 = clamp(iuv + int2(0, 1), int2(0, 0), int2(width - 1, height - 1));
+    int2 p11 = clamp(iuv + int2(1, 1), int2(0, 0), int2(width - 1, height - 1));
+
+    // Bilinear interpolation of Density
+    float4 d00 = DensityRead[p00];
+    float4 d10 = DensityRead[p10];
+    float4 d01 = DensityRead[p01];
+    float4 d11 = DensityRead[p11];
+    float4 dInterp = lerp(lerp(d00, d10, fuv.x), lerp(d01, d11, fuv.x), fuv.y);
+    DensityWrite[id.xy] = dInterp;
+
+    // Bilinear interpolation of Velocity
+    float2 v00 = VelocityRead[p00];
+    float2 v10 = VelocityRead[p10];
+    float2 v01 = VelocityRead[p01];
+    float2 v11 = VelocityRead[p11];
+    float2 vInterp = lerp(lerp(v00, v10, fuv.x), lerp(v01, v11, fuv.x), fuv.y);
+    VelocityWrite[id.xy] = vInterp;
+}
+
+[numthreads(8,8,1)]
+void Vorticity (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)width || id.y >= (uint)height) return;
+
+    int2 id_i = int2(id.x, id.y);
+    #define V(dx, dy) VelocityRead[clamp(id_i + int2(dx, dy), 0, int2(width-1, height-1))]
+    
+    float curlC = 0.5 * ((V(1,0).y - V(-1,0).y) - (V(0,1).x - V(0,-1).x));
+    float curlL = 0.5 * ((V(0,0).y - V(-2,0).y) - (V(-1,1).x - V(-1,-1).x));
+    float curlR = 0.5 * ((V(2,0).y - V(0,0).y) - (V(1,1).x - V(1,-1).x));
+    float curlB = 0.5 * ((V(1,-1).y - V(-1,-1).y) - (V(0,0).x - V(0,-2).x));
+    float curlT = 0.5 * ((V(1,1).y - V(-1,1).y) - (V(0,2).x - V(0,0).x));
+
+    float2 N = float2(abs(curlR) - abs(curlL), abs(curlT) - abs(curlB)) * 0.5;
+    float len = length(N);
+    
+    if (len > 1e-5)
+    {
+        N /= len;
+        float2 force = float2(N.y, -N.x) * curlC * vorticityScale;
+        VelocityWrite[id.xy] = VelocityRead[id.xy] + force * dt;
+    }
+    else
+    {
+        VelocityWrite[id.xy] = VelocityRead[id.xy];
+    }
+}
+
+[numthreads(8,8,1)]
+void InjectDensity (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)width || id.y >= (uint)height) return;
+
+    float2 pos = float2(id.x, id.y);
+    float dist = distance(pos, injectPos);
+
+    if (dist < injectRadius)
+    {
+        float falloff = smoothstep(injectRadius, 0.0, dist);
+        float4 currentColor = DensityRead[id.xy];
+        
+        float injectionAmount = falloff * injectColor.a; 
+        float newAlpha = min(1.0, currentColor.a + injectionAmount);
+        
+        float blendFactor = currentColor.a < 0.01 ? 1.0 : min(1.0, injectionAmount * 2.0);
+        float3 newRGB = lerp(currentColor.rgb, injectColor.rgb, blendFactor);
+        
+        DensityWrite[id.xy] = float4(newRGB, newAlpha);
+    }
+    else
+    {
+        DensityWrite[id.xy] = DensityRead[id.xy];
+    }
+}
+
+[numthreads(8,8,1)]
+void InjectVelocity (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)width || id.y >= (uint)height) return;
+
+    float2 pos = float2(id.x, id.y);
+    float dist = distance(pos, injectPos);
+
+    if (dist < injectRadius)
+    {
+        float amount = smoothstep(injectRadius, 0.0, dist);
+        VelocityWrite[id.xy] = VelocityRead[id.xy] + injectForce * amount;
+    }
+    else
+    {
+        VelocityWrite[id.xy] = VelocityRead[id.xy];
+    }
+}
+
+
+
+
+
+
+
+[numthreads(8,8,1)]
+
+
+
+void Divergence (uint3 id : SV_DispatchThreadID)
+
+
+
+{
+
+
+
+    if (id.x >= (uint)width || id.y >= (uint)height) return;
+
+
+
+
+
+
+
+    // Read neighboring velocities with boundary conditions
+
+
+
+    float2 vL = id.x > 0 ? VelocityRead[int2(id.x - 1, id.y)] : -VelocityRead[id.xy];
+
+
+
+    float2 vR = id.x < (uint)width - 1 ? VelocityRead[int2(id.x + 1, id.y)] : -VelocityRead[id.xy];
+
+
+
+    float2 vB = id.y > 0 ? VelocityRead[int2(id.x, id.y - 1)] : -VelocityRead[id.xy];
+
+
+
+    float2 vT = id.y < (uint)height - 1 ? VelocityRead[int2(id.x, id.y + 1)] : -VelocityRead[id.xy];
+
+
+
+
+
+
+
+    float div = 0.5 * ((vR.x - vL.x) + (vT.y - vB.y));
+
+
+
+    DivergenceWrite[id.xy] = div;
+
+
+
+    PressureWrite[id.xy] = 0.0; // Clear pressure for Jacobi
+
+
+
+}
+
+
+
+
+
+
+
+[numthreads(8,8,1)]
+
+
+
+void Jacobi (uint3 id : SV_DispatchThreadID)
+
+
+
+{
+
+
+
+    if (id.x >= (uint)width || id.y >= (uint)height) return;
+
+
+
+
+
+
+
+    // Read neighboring pressures with boundary conditions
+
+
+
+    float pL = id.x > 0 ? PressureRead[int2(id.x - 1, id.y)] : PressureRead[id.xy];
+
+
+
+    float pR = id.x < (uint)width - 1 ? PressureRead[int2(id.x + 1, id.y)] : PressureRead[id.xy];
+
+
+
+    float pB = id.y > 0 ? PressureRead[int2(id.x, id.y - 1)] : PressureRead[id.xy];
+
+
+
+    float pT = id.y < (uint)height - 1 ? PressureRead[int2(id.x, id.y + 1)] : PressureRead[id.xy];
+
+
+
+
+
+
+
+    float div = DivergenceRead[id.xy];
+
+
+
+
+
+
+
+    float p = (pL + pR + pB + pT - div) * 0.25;
+
+
+
+    PressureWrite[id.xy] = p;
+
+
+
+}
+
+
+
+
+
+
+
+[numthreads(8,8,1)]
+
+
+
+void SubtractGradient (uint3 id : SV_DispatchThreadID)
+
+
+
+{
+
+
+
+    if (id.x >= (uint)width || id.y >= (uint)height) return;
+
+
+
+
+
+
+
+    float pL = id.x > 0 ? PressureRead[int2(id.x - 1, id.y)] : PressureRead[id.xy];
+
+
+
+    float pR = id.x < (uint)width - 1 ? PressureRead[int2(id.x + 1, id.y)] : PressureRead[id.xy];
+
+
+
+    float pB = id.y > 0 ? PressureRead[int2(id.x, id.y - 1)] : PressureRead[id.xy];
+
+
+
+    float pT = id.y < (uint)height - 1 ? PressureRead[int2(id.x, id.y + 1)] : PressureRead[id.xy];
+
+
+
+
+
+
+
+    float2 vel = VelocityRead[id.xy];
+
+
+
+    vel.x -= 0.5 * (pR - pL);
+
+
+
+    vel.y -= 0.5 * (pT - pB);
+
+
+
+
+
+
+
+    VelocityWrite[id.xy] = vel;
+
+
+
+}
+
+
+
+
+
+
+
+[numthreads(8,8,1)]
+
+
+
+void Dissipate (uint3 id : SV_DispatchThreadID)
+
+
+
+{
+
+
+
+    if (id.x >= (uint)width || id.y >= (uint)height) return;
+
+
+
+
+
+
+
+    float4 d = DensityRead[id.xy];
+
+
+
+    float2 v = VelocityRead[id.xy];
+
+
+
+
+
+
+
+    // Fade out smoothly - only affect alpha to keep color vibrant
+
+
+
+    float newAlpha = max(0, d.a - fadeRate * dt * 5.0);
+
+
+
+    
+
+
+
+    if (newAlpha < 0.001) {
+
+
+
+        DensityWrite[id.xy] = float4(0,0,0,0);
+
+
+
+        VelocityWrite[id.xy] = v * 0.99; 
+
+
+
+    } else {
+
+
+
+        DensityWrite[id.xy] = float4(d.rgb, newAlpha); // Preserve the exact RGB hue
+
+
+
+        VelocityWrite[id.xy] = v * (1.0 - velocityDissipation * dt);
+
+
+
+    }
+
+
+
+}
+

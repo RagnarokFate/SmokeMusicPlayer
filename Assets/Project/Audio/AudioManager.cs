@@ -1,0 +1,121 @@
+using System;
+using System.Collections;
+using SmokeMusicPlayer.Data;
+using UnityEngine;
+using UnityEngine.Networking;
+
+namespace SmokeMusicPlayer.Audio
+{
+    [RequireComponent(typeof(AudioSource))]
+    public class AudioManager : MonoBehaviour
+    {
+        private AudioSource audioSource;
+        private AudioSpectrumData spectrumData;
+        private const int SAMPLE_SIZE = 1024;
+        
+        public AudioTrackMetadata CurrentTrack { get; private set; }
+        public bool IsPlaying => audioSource != null && audioSource.isPlaying;
+
+        public event Action<AudioTrackMetadata> OnTrackLoaded;
+        public event Action<string> OnError;
+
+        private void Awake()
+        {
+            audioSource = GetComponent<AudioSource>();
+            spectrumData = new AudioSpectrumData(SAMPLE_SIZE);
+        }
+
+        public void LoadAndPlayTrack(string absolutePath)
+        {
+            StartCoroutine(LoadAudioRoutine(absolutePath));
+        }
+
+        private IEnumerator LoadAudioRoutine(string path)
+        {
+            // Note: In Unity, local file paths need the file:// prefix
+            string uri = "file://" + path;
+            
+            // Determine type based on extension
+            AudioType type = AudioType.UNKNOWN;
+            if (path.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase)) type = AudioType.MPEG;
+            else if (path.EndsWith(".wav", StringComparison.OrdinalIgnoreCase)) type = AudioType.WAV;
+            else
+            {
+                OnError?.Invoke($"Unsupported audio format: {path}");
+                yield break;
+            }
+            
+            using (UnityWebRequest www = UnityWebRequestMultimedia.GetAudioClip(uri, type))
+            {
+                yield return www.SendWebRequest();
+
+                if (www.result == UnityWebRequest.Result.ConnectionError || www.result == UnityWebRequest.Result.ProtocolError)
+                {
+                    OnError?.Invoke($"Error loading audio: {www.error}");
+                    yield break;
+                }
+
+                AudioClip clip = DownloadHandlerAudioClip.GetContent(www);
+                if (clip == null || clip.loadState != AudioDataLoadState.Loaded)
+                {
+                    OnError?.Invoke("Failed to decode audio clip.");
+                    yield break;
+                }
+
+                audioSource.clip = clip;
+                
+                CurrentTrack = new AudioTrackMetadata(
+                    path, 
+                    System.IO.Path.GetFileName(path), 
+                    clip.length, 
+                    clip.frequency, 
+                    clip.channels
+                );
+
+                OnTrackLoaded?.Invoke(CurrentTrack);
+                Play();
+            }
+        }
+
+        public void Play()
+        {
+            if (audioSource.clip != null) audioSource.Play();
+        }
+
+        public void Pause()
+        {
+            audioSource.Pause();
+        }
+
+        public AudioSpectrumData GetSpectrumData()
+        {
+            if (!IsPlaying) return spectrumData;
+
+            // Get raw FFT data
+            audioSource.GetSpectrumData(spectrumData.spectrum, 0, FFTWindow.BlackmanHarris);
+
+            // Calculate averages for frequency bands
+            // Assuming 44100Hz sample rate, 1024 samples -> ~21.5Hz per bin
+            float low = 0, mid = 0, high = 0;
+            
+            // Low: 0 - 250Hz (approx bins 0-11)
+            for (int i = 0; i < 12; i++) low += spectrumData.spectrum[i];
+            spectrumData.lowBandAvg = low / 12f;
+
+            // Mid: 250Hz - 4000Hz (approx bins 12-186)
+            for (int i = 12; i < 186; i++) mid += spectrumData.spectrum[i];
+            spectrumData.midBandAvg = mid / 174f;
+
+            // High: 4000Hz - 20000Hz (approx bins 186-930)
+            for (int i = 186; i < 930; i++) high += spectrumData.spectrum[i];
+            spectrumData.highBandAvg = high / 744f;
+
+            // Overall Amplitude (simplified average)
+            float total = 0;
+            for (int i = 0; i < 512; i++) total += spectrumData.spectrum[i];
+            spectrumData.overallAmplitude = total / 512f;
+
+            return spectrumData;
+        }
+    }
+}
