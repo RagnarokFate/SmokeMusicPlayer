@@ -13,8 +13,11 @@ namespace SmokeMusicPlayer.Audio
         private AudioSpectrumData spectrumData;
         private const int SAMPLE_SIZE = 1024;
         
+        private string activeMicDevice = null;
+        private bool isMicrophoneMode = false;
+
         public AudioTrackMetadata CurrentTrack { get; private set; }
-        public bool IsPlaying => audioSource != null && audioSource.isPlaying;
+        public bool IsPlaying => (isMicrophoneMode && Microphone.IsRecording(activeMicDevice)) || (audioSource != null && audioSource.isPlaying);
 
         public event Action<AudioTrackMetadata> OnTrackLoaded;
         public event Action<string> OnError;
@@ -23,10 +26,49 @@ namespace SmokeMusicPlayer.Audio
         {
             audioSource = GetComponent<AudioSource>();
             spectrumData = new AudioSpectrumData(SAMPLE_SIZE);
+            audioSource.loop = true; // Loop for mic buffer
+        }
+
+        public string[] GetMicrophoneDevices()
+        {
+            return Microphone.devices;
+        }
+
+        public void StartMicrophone(string deviceName)
+        {
+            StopMicrophone();
+            isMicrophoneMode = true;
+            activeMicDevice = deviceName;
+
+            // Start recording: 1 sec buffer, looping, at default frequency
+            int minFreq, maxFreq;
+            Microphone.GetDeviceCaps(deviceName, out minFreq, out maxFreq);
+            int freq = maxFreq > 0 ? maxFreq : 44100;
+
+            audioSource.clip = Microphone.Start(deviceName, true, 1, freq);
+            audioSource.mute = true; // Analyzed silently
+
+            // Wait for mic to start properly before playing
+            while (!(Microphone.GetPosition(deviceName) > 0)) { }
+            audioSource.Play();
+            
+            Debug.Log($"Started Microphone: {deviceName} at {freq}Hz");
+        }
+
+        public void StopMicrophone()
+        {
+            if (isMicrophoneMode)
+            {
+                Microphone.End(activeMicDevice);
+                audioSource.Stop();
+                audioSource.mute = false;
+                isMicrophoneMode = false;
+            }
         }
 
         public void LoadAndPlayTrack(string absolutePath)
         {
+            StopMicrophone();
             StartCoroutine(LoadAudioRoutine(absolutePath));
         }
 

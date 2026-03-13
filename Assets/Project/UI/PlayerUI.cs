@@ -12,10 +12,17 @@ namespace SmokeMusicPlayer.UI
         [SerializeField] private AppController appController; // Needed to pass fluid inputs if we separate concerns further
         
         public bool showDebugUI = false;
-        
-        // Expose a public method to pass mouse position from a UI Raycaster if needed
-        private Vector2 lastMousePos;
-        private bool isDragging;
+        private bool isLiveMode = false;
+        private string[] micDevices;
+        private int selectedMicIndex = 0;
+
+        private void Start()
+        {
+            if (audioManager != null)
+            {
+                micDevices = audioManager.GetMicrophoneDevices();
+            }
+        }
 
         private void Update()
         {
@@ -30,8 +37,8 @@ namespace SmokeMusicPlayer.UI
 
             VisualizerProfile profile = appController.GetCurrentProfile();
 
-            // Set background box
-            GUI.Box(new Rect(10, 10, 300, 120), "Smoke Music Player Settings");
+            // Increase box height to fit new controls
+            GUI.Box(new Rect(10, 10, 320, 260), "Smoke Music Player Settings");
 
             // Simulation/Playback Speed Slider
             GUI.Label(new Rect(20, 40, 200, 20), $"Simulation Speed: {profile.simulationSpeed:F2}x");
@@ -48,8 +55,39 @@ namespace SmokeMusicPlayer.UI
             {
                 profile.stereoBalance = newBalance;
             }
-        }
 
+            // --- Microphone Controls ---
+            GUI.Label(new Rect(20, 130, 200, 20), "Audio Source Mode:");
+            string modeLabel = isLiveMode ? "LIVE: Microphone" : "FILE: Player";
+            if (GUI.Button(new Rect(20, 150, 280, 30), $"Mode: {modeLabel}"))
+            {
+                isLiveMode = !isLiveMode;
+                if (isLiveMode && micDevices != null && micDevices.Length > 0)
+                {
+                    audioManager.StartMicrophone(micDevices[selectedMicIndex]);
+                }
+                else
+                {
+                    audioManager.StopMicrophone();
+                }
+            }
+
+            if (isLiveMode && micDevices != null && micDevices.Length > 0)
+            {
+                GUI.Label(new Rect(20, 190, 280, 20), $"Select Microphone ({micDevices.Length}):");
+                for (int i = 0; i < micDevices.Length; i++)
+                {
+                    if (GUI.Toggle(new Rect(20, 210 + (i * 20), 280, 20), selectedMicIndex == i, micDevices[i]))
+                    {
+                        if (selectedMicIndex != i)
+                        {
+                            selectedMicIndex = i;
+                            audioManager.StartMicrophone(micDevices[selectedMicIndex]);
+                        }
+                    }
+                }
+            }
+        }
         private void UpdateDebugStats()
         {
             // Simple FPS calculation for MVP
