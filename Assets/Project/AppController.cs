@@ -127,10 +127,11 @@ namespace SmokeMusicPlayer
                     float densityAmount = baseAmount * 5.0f;
                     solver.InjectDensity(pos, 0.08f, densityAmount, color);
                     
-                    // Upward thrust
+                    // Upward thrust with stereo drift
                     float horizontalDrift = Mathf.Sin(Time.time * currentProfile.vorticity * 2f + (normalizedX * Mathf.PI * 8f));
-                    // Velocity force: 1500 means 1500 pixels per second, so it shoots up nicely across the 512px grid
-                    Vector2 force = new Vector2(horizontalDrift * 0.4f, 1.0f).normalized * baseAmount * 1500f;
+                    // Stereo trick: Add stereoBalance to the horizontal component
+                    Vector2 baseDirection = new Vector2(horizontalDrift * 0.4f + currentProfile.stereoBalance, 1.0f).normalized;
+                    Vector2 force = baseDirection * baseAmount * 1500f;
                     solver.InjectVelocity(pos, 0.12f, force);
                 }
             }

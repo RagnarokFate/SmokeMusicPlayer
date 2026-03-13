@@ -24,6 +24,32 @@ namespace SmokeMusicPlayer.UI
             UpdateDebugStats();
         }
 
+        private void OnGUI()
+        {
+            if (appController == null || appController.GetCurrentProfile() == null) return;
+
+            VisualizerProfile profile = appController.GetCurrentProfile();
+
+            // Set background box
+            GUI.Box(new Rect(10, 10, 300, 120), "Smoke Music Player Settings");
+
+            // Simulation/Playback Speed Slider
+            GUI.Label(new Rect(20, 40, 200, 20), $"Simulation Speed: {profile.simulationSpeed:F2}x");
+            float newSpeed = GUI.HorizontalSlider(new Rect(20, 60, 280, 20), profile.simulationSpeed, 0.5f, 2.0f);
+            if (Mathf.Abs(newSpeed - profile.simulationSpeed) > 0.01f)
+            {
+                SetSpeed(newSpeed);
+            }
+
+            // Stereo Balance Slider
+            GUI.Label(new Rect(20, 80, 200, 20), $"Stereo Balance (Left-Right): {profile.stereoBalance:F2}");
+            float newBalance = GUI.HorizontalSlider(new Rect(20, 100, 280, 20), profile.stereoBalance, -1.0f, 1.0f);
+            if (Mathf.Abs(newBalance - profile.stereoBalance) > 0.01f)
+            {
+                profile.stereoBalance = newBalance;
+            }
+        }
+
         private void UpdateDebugStats()
         {
             // Simple FPS calculation for MVP
