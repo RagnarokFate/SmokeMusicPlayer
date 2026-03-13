@@ -1,6 +1,10 @@
 # Smoke Music Player
 
+![Project Cover](Assets/Project/illustration/smoke-music-player-cover.png)
+
 Smoke Music Player is a dynamic 2D audio visualizer built in Unity. It uses real-time FFT (Fast Fourier Transform) analysis to drive a fluid simulation (smoke), creating an immersive and interactive music experience.
+
+![Main Demo GIF](Assets/Project/illustration/SmokeMusicPlayer.gif)
 
 ## Features
 
@@ -9,6 +13,26 @@ Smoke Music Player is a dynamic 2D audio visualizer built in Unity. It uses real
 - **Interactive Smoke**: Influence the smoke density and velocity with mouse drag interactions.
 - **Customizable Presets**: Adjust simulation parameters (viscosity, diffusion, color) and save/load your favorite configurations.
 - **Cross-Platform Support**: Optimized for Windows Standalone with a CPU-based fallback for older hardware.
+
+## Project Architecture
+
+The project follows a modular pipeline designed for real-time responsiveness and high-performance GPU simulation.
+
+### Data Flow Pipeline
+
+![Architecture Flow](Assets/Project/illustration/architecture_flow.png)
+
+The system operates in a continuous loop:
+1.  **Audio Analysis**: `AudioManager` extracts raw spectral data using FFT.
+2.  **Mapping**: `AppController` maps frequency bands (Bass/Mid/High) to physical fluid properties like density, velocity, and color.
+3.  **Simulation Step**: The `IFluidSolver` (GPU or CPU) calculates the next state of the grid based on Navier-Stokes equations for stable fluids.
+4.  **Rendering**: The final density grid is written to a `RenderTexture` and displayed via a custom shader on a 2D quad.
+
+### GPU Compute Dispatching
+
+![Compute Shader Logic](Assets/Project/illustration/compute_shader_logic.png)
+
+To maintain 60+ FPS at high resolutions (512x512 grid), the simulation is split into concurrent thread groups on the GPU. Each cell's pressure, velocity, and density are updated in parallel using kernels defined in `FluidMath.compute`.
 
 ## Getting Started
 
