@@ -56,20 +56,16 @@ namespace SmokeMusicPlayer.UI
                 profile.stereoBalance = newBalance;
             }
 
-            // --- Microphone Controls ---
+        // --- Audio Mode Controls ---
             GUI.Label(new Rect(20, 130, 200, 20), "Audio Source Mode:");
-            string modeLabel = isLiveMode ? "LIVE: Microphone" : "FILE: Player";
+            
+            string modeLabel = "FILE: Player";
+            if (isLiveMode) modeLabel = "LIVE: Microphone";
+            if (isDesktopMode) modeLabel = "SYSTEM: Desktop";
+
             if (GUI.Button(new Rect(20, 150, 280, 30), $"Mode: {modeLabel}"))
             {
-                isLiveMode = !isLiveMode;
-                if (isLiveMode && micDevices != null && micDevices.Length > 0)
-                {
-                    audioManager.StartMicrophone(micDevices[selectedMicIndex]);
-                }
-                else
-                {
-                    audioManager.StopMicrophone();
-                }
+                CycleAudioMode();
             }
 
             if (isLiveMode && micDevices != null && micDevices.Length > 0)
@@ -86,6 +82,29 @@ namespace SmokeMusicPlayer.UI
                         }
                     }
                 }
+            }
+        }
+
+        private bool isDesktopMode = false;
+
+        private void CycleAudioMode()
+        {
+            if (!isLiveMode && !isDesktopMode) // From File -> Mic
+            {
+                isLiveMode = true;
+                if (micDevices != null && micDevices.Length > 0)
+                    audioManager.StartMicrophone(micDevices[selectedMicIndex]);
+            }
+            else if (isLiveMode) // From Mic -> Desktop
+            {
+                isLiveMode = false;
+                isDesktopMode = true;
+                audioManager.StartDesktopAudio();
+            }
+            else // From Desktop -> File
+            {
+                isDesktopMode = false;
+                audioManager.StopAllModes();
             }
         }
         private void UpdateDebugStats()

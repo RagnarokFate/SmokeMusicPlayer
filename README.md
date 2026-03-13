@@ -8,8 +8,8 @@ Smoke Music Player is a dynamic 2D audio visualizer built in Unity. It uses real
 
 ## Features
 
-- **Real-time Audio Visualization**: Supports `.mp3`, `.wav` files, and live **Microphone Input**.
-- **Live Mode**: Analyze audio silently from any connected microphone device.
+- **Real-time Audio Visualization**: Supports `.mp3`, `.wav` files, live **Microphone Input**, and **System Desktop Audio**.
+- **Live Mode**: Analyze audio silently from any connected microphone or your desktop output.
 - **Fluid Simulation**: Powered by GPU Compute Shaders for high performance (60+ FPS).
 - **Interactive Smoke**: Influence the smoke density and velocity with mouse drag interactions.
 - **Customizable Presets**: Adjust simulation parameters (viscosity, diffusion, color) and save/load your favorite configurations.
@@ -61,7 +61,9 @@ To maintain 60+ FPS at high resolutions (512x512 grid), the simulation is split 
 
 1. **Audio Sources**: 
    - **File Mode**: Load a `.wav`/`.mp3` file for playback and visualization.
-   - **Live Mode**: Toggle the **Mode** button to switch to **LIVE** mode and select a microphone from the list. The smoke will react to ambient sound silently (no feedback).
+   - **Live Mode (Microphone)**: Switch to **LIVE** mode to select a microphone. The smoke reacts to ambient sound.
+   - **System Mode (Desktop)**: Switch to **SYSTEM** mode to capture all desktop audio (music, games, etc.).
+     - *Note: System mode requires `NAudio.dll` in `Assets/Plugins/`.*
 2. **Playback & Simulation Controls**: 
    - **Speed Slider**: Adjust the simulation and playback speed (0.5x to 2.0x) using the on-screen slider.
    - **Stereo Balance**: Adjust the drift of the smoke to the left or right (-1.0 to 1.0) with the balance slider.

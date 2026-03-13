@@ -15,9 +15,14 @@ namespace SmokeMusicPlayer.Audio
         
         private string activeMicDevice = null;
         private bool isMicrophoneMode = false;
+        private bool isDesktopMode = false;
+        
+        [SerializeField] private WasapiAudioCapture wasapiCapture;
 
         public AudioTrackMetadata CurrentTrack { get; private set; }
-        public bool IsPlaying => (isMicrophoneMode && Microphone.IsRecording(activeMicDevice)) || (audioSource != null && audioSource.isPlaying);
+        public bool IsPlaying => (isMicrophoneMode && Microphone.IsRecording(activeMicDevice)) || 
+                                (isDesktopMode && wasapiCapture != null && wasapiCapture.IsCapturing) ||
+                                (audioSource != null && audioSource.isPlaying);
 
         public event Action<AudioTrackMetadata> OnTrackLoaded;
         public event Action<string> OnError;
@@ -27,6 +32,8 @@ namespace SmokeMusicPlayer.Audio
             audioSource = GetComponent<AudioSource>();
             spectrumData = new AudioSpectrumData(SAMPLE_SIZE);
             audioSource.loop = true; // Loop for mic buffer
+            
+            if (wasapiCapture == null) wasapiCapture = GetComponent<WasapiAudioCapture>();
         }
 
         public string[] GetMicrophoneDevices()
@@ -36,7 +43,7 @@ namespace SmokeMusicPlayer.Audio
 
         public void StartMicrophone(string deviceName)
         {
-            StopMicrophone();
+            StopAllModes();
             isMicrophoneMode = true;
             activeMicDevice = deviceName;
 
@@ -55,7 +62,14 @@ namespace SmokeMusicPlayer.Audio
             Debug.Log($"Started Microphone: {deviceName} at {freq}Hz");
         }
 
-        public void StopMicrophone()
+        public void StartDesktopAudio()
+        {
+            StopAllModes();
+            isDesktopMode = true;
+            if (wasapiCapture != null) wasapiCapture.StartCapture();
+        }
+
+        public void StopAllModes()
         {
             if (isMicrophoneMode)
             {
@@ -64,11 +78,16 @@ namespace SmokeMusicPlayer.Audio
                 audioSource.mute = false;
                 isMicrophoneMode = false;
             }
+            if (isDesktopMode)
+            {
+                if (wasapiCapture != null) wasapiCapture.StopCapture();
+                isDesktopMode = false;
+            }
         }
 
         public void LoadAndPlayTrack(string absolutePath)
         {
-            StopMicrophone();
+            StopAllModes();
             StartCoroutine(LoadAudioRoutine(absolutePath));
         }
 
@@ -141,8 +160,14 @@ namespace SmokeMusicPlayer.Audio
         {
             if (!IsPlaying) return spectrumData;
 
-            // Get raw FFT data
-            audioSource.GetSpectrumData(spectrumData.spectrum, 0, FFTWindow.BlackmanHarris);
+            if (isDesktopMode && wasapiCapture != null && wasapiCapture.LatestSamples != null)
+            {
+                AnalyzeExternalSamples(wasapiCapture.LatestSamples);
+            }
+            else
+            {
+                audioSource.GetSpectrumData(spectrumData.spectrum, 0, FFTWindow.BlackmanHarris);
+            }
 
             // Calculate averages for frequency bands
             // Assuming 44100Hz sample rate, 1024 samples -> ~21.5Hz per bin
@@ -166,6 +191,17 @@ namespace SmokeMusicPlayer.Audio
             spectrumData.overallAmplitude = total / 512f;
 
             return spectrumData;
+        }
+
+        private void AnalyzeExternalSamples(float[] samples)
+        {
+            // For MVP: Simple power distribution approximation from time-domain samples
+            // Note: In a production visualizer, we would use a real FFT library like KissFFT or a Compute Shader
+            int startIdx = Math.Max(0, samples.Length - SAMPLE_SIZE);
+            for (int i = 0; i < SAMPLE_SIZE && (startIdx + i) < samples.Length; i++)
+            {
+                spectrumData.spectrum[i] = Mathf.Abs(samples[startIdx + i]);
+            }
         }
     }
 }
