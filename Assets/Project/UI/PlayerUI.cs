@@ -64,6 +64,20 @@ namespace SmokeMusicPlayer.UI
             {
                 showDebugUI = !showDebugUI;
             }
+
+            // Speed Controls: 1 = 0.5x, 2 = 1.0x, 3 = 2.0x
+            if (Keyboard.current.digit1Key.wasPressedThisFrame) SetSpeed(0.5f);
+            if (Keyboard.current.digit2Key.wasPressedThisFrame) SetSpeed(1.0f);
+            if (Keyboard.current.digit3Key.wasPressedThisFrame) SetSpeed(2.0f);
+        }
+
+        private void SetSpeed(float speed)
+        {
+            if (appController != null && appController.GetCurrentProfile() != null)
+            {
+                appController.GetCurrentProfile().simulationSpeed = speed;
+                audioManager.SetPlaybackSpeed(speed);
+            }
         }
 
         private void HandleMouseInput()
@@ -116,7 +130,11 @@ namespace SmokeMusicPlayer.UI
             if (appController != null)
             {
                 VisualizerProfile loaded = PresetManager.LoadProfile(profileName);
-                appController.SetCurrentProfile(loaded);
+                if (loaded != null)
+                {
+                    appController.SetCurrentProfile(loaded);
+                    audioManager.SetPlaybackSpeed(loaded.simulationSpeed);
+                }
             }
         }
     }

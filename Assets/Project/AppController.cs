@@ -59,7 +59,7 @@ namespace SmokeMusicPlayer
             // Step 3: Step fluid simulation
             if (currentProfile != null)
             {
-                solver.UpdateFluid(Time.deltaTime, spectrum, currentProfile);
+                solver.UpdateFluid(Time.deltaTime * currentProfile.simulationSpeed, spectrum, currentProfile);
             }
         }
 

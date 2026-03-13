@@ -28,5 +28,6 @@ namespace SmokeMusicPlayer.Data
         
         public float bassMultiplier = 2.0f;
         public float trebleMultiplier = 2.0f;
+        public float simulationSpeed = 1.0f;
     }
 }

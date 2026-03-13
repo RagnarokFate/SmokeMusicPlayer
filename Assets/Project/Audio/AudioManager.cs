@@ -87,6 +87,14 @@ namespace SmokeMusicPlayer.Audio
             audioSource.Pause();
         }
 
+        public void SetPlaybackSpeed(float speed)
+        {
+            if (audioSource != null)
+            {
+                audioSource.pitch = Mathf.Clamp(speed, 0.5f, 2.0f);
+            }
+        }
+
         public AudioSpectrumData GetSpectrumData()
         {
             if (!IsPlaying) return spectrumData;

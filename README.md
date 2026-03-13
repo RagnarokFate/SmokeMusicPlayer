@@ -36,6 +36,7 @@ Smoke Music Player is a dynamic 2D audio visualizer built in Unity. It uses real
 
 1. **Load Music**: Click the "Load" button in the UI or drag and drop a `.wav`/`.mp3` file into the designated area (if supported by build).
 2. **Playback Controls**: Use standard Play/Pause, Skip, and Volume controls.
+   - **Speed Control**: Press `1` for 0.5x, `2` for 1.0x (normal), and `3` for 2.0x speed. This affects both music pitch and smoke animation speed.
 3. **Interact**: Click and drag your mouse across the visualization window to disturb the smoke.
 4. **Configure**: Use the settings panel to tweak the simulation:
    - **Viscosity**: Control how "thick" the smoke feels.
