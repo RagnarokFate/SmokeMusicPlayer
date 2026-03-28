@@ -221,16 +221,18 @@ namespace SmokeMusicPlayer.UI
 
             int bands = 64;
             float barWidth = rect.width / bands;
-            
             for (int i = 0; i < bands; i++)
             {
+                // Slightly less aggressive power for more high-end detail
                 float normalized = (float)i / bands;
-                float power = Mathf.Pow(normalized, 1.5f);
-                int binIndex = Mathf.Clamp(Mathf.RoundToInt(power * 320), 0, 511);
-                
-                float amplitude = spectrum[binIndex] * 12f;
+                float power = Mathf.Pow(normalized, 1.2f); // Changed from 1.5 to 1.2 to show more spectrum
+                int binIndex = Mathf.Clamp(Mathf.RoundToInt(power * 511), 0, 511);
+
+                // Frequency dependent boost to normalize visual output (highs are quieter in FFT)
+                float freqBoost = 1.0f + (normalized * 4.0f);
+                float amplitude = spectrum[binIndex] * 12f * freqBoost;
                 float barHeight = Mathf.Clamp(amplitude * rect.height, 2, rect.height);
-                
+
                 // Matching smoke color mapping: Hue 0.0 to 0.7
                 float hue = normalized * 0.7f;
                 GUI.color = Color.HSVToRGB(hue, 0.7f, 1.0f);

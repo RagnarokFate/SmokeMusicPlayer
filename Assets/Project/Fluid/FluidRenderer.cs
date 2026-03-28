@@ -15,13 +15,20 @@ namespace SmokeMusicPlayer.Fluid
 
         private void Update()
         {
-            if (solver != null && targetImage != null)
+            if (this == null || solver == null || targetImage == null) return;
+            
+            RenderTexture densityTex = solver.GetDensityTexture();
+            if (densityTex != null)
             {
-                RenderTexture densityTex = solver.GetDensityTexture();
-                if (densityTex != null)
-                {
-                    targetImage.texture = densityTex;
-                }
+                targetImage.texture = densityTex;
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (targetImage != null)
+            {
+                targetImage.texture = null;
             }
         }
     }
