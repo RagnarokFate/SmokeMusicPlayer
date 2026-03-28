@@ -26,15 +26,22 @@ namespace SmokeMusicPlayer.UI
             whiteTex = Texture2D.whiteTexture;
             if (audioManager != null)
             {
+                // Sync the UI's understanding of the mode with the manager
                 micDevices = audioManager.GetMicrophoneDevices();
-                if (!string.IsNullOrEmpty(audioManager.selectedMicName))
+                
+                // If AudioManager is starting in File mode, ensure we don't accidentally
+                // think we are in Mic mode because of a default selectedMicIndex.
+                if (audioManager.initialMode == AudioManager.SourceMode.Microphone)
                 {
-                    for (int i = 0; i < micDevices.Length; i++)
+                    if (!string.IsNullOrEmpty(audioManager.selectedMicName))
                     {
-                        if (micDevices[i] == audioManager.selectedMicName)
+                        for (int i = 0; i < micDevices.Length; i++)
                         {
-                            selectedMicIndex = i;
-                            break;
+                            if (micDevices[i] == audioManager.selectedMicName)
+                            {
+                                selectedMicIndex = i;
+                                break;
+                            }
                         }
                     }
                 }
@@ -117,10 +124,6 @@ namespace SmokeMusicPlayer.UI
                 GUILayout.Label($"Speed / Pitch: {profile.simulationSpeed:F2}x");
                 float newSpeed = GUILayout.HorizontalSlider(profile.simulationSpeed, 0.5f, 2.0f);
                 if (Mathf.Abs(newSpeed - profile.simulationSpeed) > 0.01f) SetSpeed(newSpeed);
-
-                GUILayout.Space(10);
-                GUILayout.Label($"Stereo Width: {profile.stereoBalance:F2}");
-                profile.stereoBalance = GUILayout.HorizontalSlider(profile.stereoBalance, -1.0f, 1.0f);
                 GUILayout.EndVertical();
                 
                 GUILayout.Space(10);
@@ -130,6 +133,18 @@ namespace SmokeMusicPlayer.UI
                     Debug.Log("File browser integration coming soon.");
                 }
             }
+
+            // Audio Statistics Section
+            GUILayout.Space(10);
+            GUILayout.BeginVertical("box");
+            GUILayout.Label("<b>SYSTEM AUDIO INFO</b>");
+            int sampleRate = AudioSettings.outputSampleRate;
+            string channels = AudioSettings.speakerMode.ToString();
+            GUILayout.Label($"<size=9>Sample Rate: {sampleRate} Hz</size>");
+            GUILayout.Label($"<size=9>Output Mode: {channels}</size>");
+            float currentGain = audioManager.initialMode == AudioManager.SourceMode.Microphone ? audioManager.liveSensitivity : 1.0f;
+            GUILayout.Label($"<size=9>Current Gain: {currentGain:F1}x</size>");
+            GUILayout.EndVertical();
         }
 
         private void DrawVisualsTab()
@@ -221,7 +236,9 @@ namespace SmokeMusicPlayer.UI
                 float amplitude = spectrum[binIndex] * 12f;
                 float barHeight = Mathf.Clamp(amplitude * rect.height, 2, rect.height);
                 
-                GUI.color = Color.Lerp(Color.red, Color.cyan, normalized);
+                // Matching smoke color mapping: Hue 0.0 to 0.7
+                float hue = normalized * 0.7f;
+                GUI.color = Color.HSVToRGB(hue, 0.7f, 1.0f);
                 GUI.DrawTexture(new Rect(rect.x + (i * barWidth), rect.y + rect.height - barHeight, barWidth - 1, barHeight), whiteTex);
             }
             GUI.color = Color.white;
