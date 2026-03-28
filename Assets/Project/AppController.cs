@@ -45,7 +45,7 @@ namespace SmokeMusicPlayer
             }
         private void Update()
         {
-            if (solver == null) return;
+            if (this == null || solver == null || audioManager == null) return;
 
             // Step 1: Get Audio Data
             AudioSpectrumData spectrum = audioManager.GetSpectrumData();
@@ -63,9 +63,18 @@ namespace SmokeMusicPlayer
             }
         }
 
+        private void OnDestroy()
+        {
+            if (solver != null)
+            {
+                solver.Release();
+                solver = null;
+            }
+        }
+
         private void InjectAudioForces(AudioSpectrumData spectrum)
         {
-            if (currentProfile == null) return;
+            if (this == null || currentProfile == null || solver == null) return;
             
             int bandsToRender = 128; // The number of "emitters" across the X axis
             

@@ -58,7 +58,8 @@ namespace SmokeMusicPlayer.UI
 
         private void OnGUI()
         {
-            if (this == null || appController == null || audioManager == null) return;
+            if (this == null || !Application.isPlaying) return;
+            if (appController == null || audioManager == null) return;
             
             VisualizerProfile profile = appController.GetCurrentProfile();
             if (profile == null) return;
@@ -68,7 +69,7 @@ namespace SmokeMusicPlayer.UI
             
             // Header
             GUI.Label(new Rect(25, 20, 200, 30), "<size=16><b>SMOKE</b> PLAYER</size>");
-            GUI.Label(new Rect(350, 23, 100, 20), "<size=10>v1.3.0</size>");
+            GUI.Label(new Rect(350, 23, 100, 20), "<size=10>v1.3.1</size>");
 
             GUILayout.BeginArea(new Rect(20, 55, 400, 380));
             currentTab = GUILayout.Toolbar(currentTab, tabLabels, GUILayout.Height(30));
@@ -76,17 +77,17 @@ namespace SmokeMusicPlayer.UI
 
             switch (currentTab)
             {
-                case 0: DrawAudioTab(); break;
-                case 1: DrawVisualsTab(); break;
+                case 0: DrawAudioTab(profile); break;
+                case 1: DrawVisualsTab(profile); break;
                 case 2: DrawSimulationTab(profile); break;
                 case 3: DrawPresetsTab(); break;
             }
             GUILayout.EndArea();
         }
 
-        private void DrawAudioTab()
+        private void DrawAudioTab(VisualizerProfile profile)
         {
-            VisualizerProfile profile = appController.GetCurrentProfile();
+            if (audioManager == null || profile == null) return;
 
             GUILayout.BeginVertical("box");
             GUILayout.Label("<b>AUDIO SOURCE</b>");
@@ -125,13 +126,6 @@ namespace SmokeMusicPlayer.UI
                 float newSpeed = GUILayout.HorizontalSlider(profile.simulationSpeed, 0.5f, 2.0f);
                 if (Mathf.Abs(newSpeed - profile.simulationSpeed) > 0.01f) SetSpeed(newSpeed);
                 GUILayout.EndVertical();
-                
-                GUILayout.Space(10);
-                if (GUILayout.Button("Open File (Experimental)", GUILayout.Height(30))) 
-                {
-                    // Placeholder for future file browser
-                    Debug.Log("File browser integration coming soon.");
-                }
             }
 
             // Audio Statistics Section
@@ -147,10 +141,11 @@ namespace SmokeMusicPlayer.UI
             GUILayout.EndVertical();
         }
 
-        private void DrawVisualsTab()
+        private void DrawVisualsTab(VisualizerProfile profile)
         {
+            if (audioManager == null || profile == null) return;
+            
             AudioSpectrumData spectrum = audioManager.GetSpectrumData();
-            VisualizerProfile profile = appController.GetCurrentProfile();
 
             GUILayout.BeginHorizontal(GUILayout.Height(150));
             DrawFrequencyMeter(GUILayoutUtility.GetRect(280, 150));
