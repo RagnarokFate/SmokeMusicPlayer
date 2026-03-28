@@ -9,6 +9,9 @@ namespace SmokeMusicPlayer.Data
         public float midBandAvg;
         public float highBandAvg;
         public float overallAmplitude;
+        public float rmsValue;
+        public float currentDB;
+        public float peakDB;
 
         public AudioSpectrumData(int sampleSize)
         {
@@ -17,6 +20,9 @@ namespace SmokeMusicPlayer.Data
             midBandAvg = 0f;
             highBandAvg = 0f;
             overallAmplitude = 0f;
+            rmsValue = 0f;
+            currentDB = -60f;
+            peakDB = -60f;
         }
     }
 }

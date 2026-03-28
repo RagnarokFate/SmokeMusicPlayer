@@ -91,9 +91,17 @@ namespace SmokeMusicPlayer
                 {
                     Vector2 pos = new Vector2(normalizedX, 0.02f); 
                     
-                    // Smoothly blend colors based on X position across the entire palette
+                    // Smoothly blend colors based on X position or Frequency
                     Color color;
-                    if (currentProfile.colorPalette.Count <= 1)
+                    if (currentProfile.useFrequencyToHue)
+                    {
+                        // Map frequency bin (0-255) to a hue (0.0 - 1.0)
+                        // Bass is red (0.0), Mid is green (0.33), High is blue (0.66)
+                        float hue = ((float)binIndex / 255f) * currentProfile.colorSensitivity;
+                        hue %= 1.0f; // Wrap hue
+                        color = Color.HSVToRGB(hue, 0.8f, 1.0f);
+                    }
+                    else if (currentProfile.colorPalette.Count <= 1)
                     {
                         color = currentProfile.colorPalette.Count == 1 ? currentProfile.colorPalette[0] : Color.white;
                     }

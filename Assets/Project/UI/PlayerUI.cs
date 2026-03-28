@@ -15,13 +15,12 @@ namespace SmokeMusicPlayer.UI
         private string[] micDevices;
         private int selectedMicIndex = 0;
         private int currentTab = 0;
-        private readonly string[] tabLabels = { "Audio", "Simulation", "Presets" };
-
-        private Vector2 lastMousePos;
-        private bool isDragging;
+        private readonly string[] tabLabels = { "Audio", "Visuals", "Simulation", "Presets" };
+        private Texture2D whiteTex;
 
         private void Start()
         {
+            whiteTex = Texture2D.whiteTexture;
             if (audioManager != null)
             {
                 micDevices = audioManager.GetMicrophoneDevices();
@@ -55,19 +54,98 @@ namespace SmokeMusicPlayer.UI
             if (profile == null) return;
 
             GUI.backgroundColor = new Color(0.1f, 0.1f, 0.12f, 0.95f);
-            GUI.Box(new Rect(10, 10, 350, 320), "<b>Smoke Music Player</b> v1.1.0");
+            GUI.Box(new Rect(10, 10, 400, 420), "<b>Smoke Music Player</b> v1.2.0");
             
-            GUILayout.BeginArea(new Rect(20, 40, 330, 280));
+            GUILayout.BeginArea(new Rect(20, 40, 380, 380));
             currentTab = GUILayout.Toolbar(currentTab, tabLabels, GUILayout.Height(25));
             GUILayout.Space(10);
 
             switch (currentTab)
             {
                 case 0: DrawAudioTab(); break;
-                case 1: DrawSimulationTab(profile); break;
-                case 2: DrawPresetsTab(); break;
+                case 1: DrawVisualsTab(); break;
+                case 2: DrawSimulationTab(profile); break;
+                case 3: DrawPresetsTab(); break;
             }
             GUILayout.EndArea();
+        }
+
+        private void DrawVisualsTab()
+        {
+            AudioSpectrumData spectrum = audioManager.GetSpectrumData();
+            
+            GUILayout.BeginHorizontal(GUILayout.Height(150));
+            DrawFrequencyMeter(GUILayoutUtility.GetRect(250, 150));
+            GUILayout.Space(10);
+            DrawDBMeter(GUILayoutUtility.GetRect(50, 150), spectrum);
+            GUILayout.EndHorizontal();
+            
+            GUILayout.Space(10);
+            GUILayout.Label("<b>Spectrum Visualizer</b>");
+            GUILayout.Label("Logarithmic Scale: 20Hz - 20kHz");
+            
+            GUILayout.Label($"Overall Gain: {spectrum.overallAmplitude * 100:F1}%");
+        }
+
+        private void DrawFrequencyMeter(Rect rect)
+        {
+            GUI.Box(rect, "");
+            float[] spectrum = audioManager.GetSmoothSpectrum();
+            if (spectrum == null) return;
+
+            int bands = 64;
+            float barWidth = rect.width / bands;
+            
+            for (int i = 0; i < bands; i++)
+            {
+                // Logarithmic binning
+                float normalized = (float)i / bands;
+                float power = Mathf.Pow(normalized, 2.0f);
+                int binIndex = Mathf.Clamp(Mathf.RoundToInt(power * 255), 0, 511);
+                
+                float amplitude = spectrum[binIndex] * 10f; // Boost for display
+                float barHeight = Mathf.Clamp(amplitude * rect.height, 2, rect.height);
+                
+                Color barColor = Color.Lerp(Color.red, Color.cyan, normalized);
+                GUI.color = barColor;
+                GUI.DrawTexture(new Rect(rect.x + (i * barWidth), rect.y + rect.height - barHeight, barWidth - 1, barHeight), whiteTex);
+            }
+            GUI.color = Color.white;
+            
+            // Labels
+            GUI.Label(new Rect(rect.x, rect.y + rect.height + 2, 50, 20), "<size=9>20Hz</size>");
+            GUI.Label(new Rect(rect.x + rect.width - 50, rect.y + rect.height + 2, 50, 20), "<size=9>20kHz</size>");
+        }
+
+        private void DrawDBMeter(Rect rect, AudioSpectrumData data)
+        {
+            GUI.Box(rect, "");
+            float dbNorm = Mathf.InverseLerp(-60f, 0f, data.currentDB);
+            float peakNorm = Mathf.InverseLerp(-60f, 0f, data.peakDB);
+            
+            float meterHeight = rect.height * dbNorm;
+            float peakY = rect.y + rect.height - (rect.height * peakNorm);
+
+            // Background color zones
+            GUI.color = new Color(0, 1, 0, 0.2f); // Green zone
+            GUI.DrawTexture(new Rect(rect.x, rect.y + (rect.height * 0.2f), rect.width, rect.height * 0.8f), whiteTex);
+            GUI.color = new Color(1, 1, 0, 0.2f); // Yellow zone (-12dB to -3dB approx)
+            GUI.DrawTexture(new Rect(rect.x, rect.y + (rect.height * 0.05f), rect.width, rect.height * 0.15f), whiteTex);
+            GUI.color = new Color(1, 0, 0, 0.2f); // Red zone (-3dB to 0dB)
+            GUI.DrawTexture(new Rect(rect.x, rect.y, rect.width, rect.height * 0.05f), whiteTex);
+
+            // Current level
+            GUI.color = Color.Lerp(Color.green, Color.red, dbNorm);
+            GUI.DrawTexture(new Rect(rect.x + 5, rect.y + rect.height - meterHeight, rect.width - 10, meterHeight), whiteTex);
+            
+            // Peak line
+            GUI.color = Color.white;
+            GUI.DrawTexture(new Rect(rect.x + 2, peakY, rect.width - 4, 2), whiteTex);
+            
+            GUI.color = Color.white;
+            GUI.Label(new Rect(rect.x + rect.width + 5, rect.y, 40, 20), "<size=9>0dB</size>");
+            GUI.Label(new Rect(rect.x + rect.width + 5, rect.y + rect.height - 15, 40, 20), "<size=9>-60dB</size>");
+            GUI.Label(new Rect(rect.x, rect.y - 18, 50, 20), $"<b>{data.currentDB:F1}</b>");
         }
 
         private void DrawAudioTab()
@@ -118,11 +196,22 @@ namespace SmokeMusicPlayer.UI
             profile.viscosity = GUILayout.HorizontalSlider(profile.viscosity, 0.00001f, 0.005f);
 
             GUILayout.Space(10);
+            GUILayout.Label("<b>Advanced Visuals</b>");
+            profile.useFrequencyToHue = GUILayout.Toggle(profile.useFrequencyToHue, " Use Frequency-to-Hue Mapping");
+            if (profile.useFrequencyToHue)
+            {
+                GUILayout.Label($"Color Sensitivity: {profile.colorSensitivity:F1}");
+                profile.colorSensitivity = GUILayout.HorizontalSlider(profile.colorSensitivity, 0.1f, 5.0f);
+            }
+
+            GUILayout.Space(10);
             if (GUILayout.Button("Reset Defaults"))
             {
                 profile.simulationSpeed = 1.0f;
                 profile.stereoBalance = 0.0f;
                 profile.viscosity = 0.0001f;
+                profile.useFrequencyToHue = true;
+                profile.colorSensitivity = 1.0f;
             }
         }
 

@@ -111,9 +111,13 @@ namespace SmokeMusicPlayer.Audio
         public void Pause() { audioSource.Pause(); }
         public void SetPlaybackSpeed(float speed) { if (audioSource != null) audioSource.pitch = Mathf.Clamp(speed, 0.5f, 2.0f); }
 
+        private int lastUpdateFrame = -1;
+
         public AudioSpectrumData GetSpectrumData()
         {
             if (this == null || !IsPlaying) return spectrumData;
+            if (lastUpdateFrame == Time.frameCount) return spectrumData;
+            lastUpdateFrame = Time.frameCount;
 
             if (isMicrophoneMode && audioSource != null && audioSource.clip != null)
             {
@@ -143,9 +147,41 @@ namespace SmokeMusicPlayer.Audio
             }
         }
 
+        private float[] smoothSpectrum;
+        private float peakFallSpeed = 30f; // dB per second
+
         private void CalculateBands()
         {
             if (this == null || spectrumData.spectrum == null) return;
+            
+            if (smoothSpectrum == null || smoothSpectrum.Length != spectrumData.spectrum.Length)
+                smoothSpectrum = new float[spectrumData.spectrum.Length];
+
+            float sumSquared = 0;
+            for (int i = 0; i < spectrumData.spectrum.Length; i++)
+            {
+                // Smooth spectrum for UI
+                smoothSpectrum[i] = Mathf.Lerp(smoothSpectrum[i], spectrumData.spectrum[i], Time.deltaTime * 15f);
+                sumSquared += spectrumData.spectrum[i] * spectrumData.spectrum[i];
+            }
+
+            // RMS and DB
+            spectrumData.rmsValue = Mathf.Sqrt(sumSquared / spectrumData.spectrum.Length);
+            // Convert to dB, with -60dB floor
+            float db = 20 * Mathf.Log10(Mathf.Max(spectrumData.rmsValue, 0.001f));
+            spectrumData.currentDB = Mathf.Lerp(spectrumData.currentDB, db, Time.deltaTime * 20f);
+            
+            // Peak Hold
+            if (spectrumData.currentDB > spectrumData.peakDB)
+            {
+                spectrumData.peakDB = spectrumData.currentDB;
+            }
+            else
+            {
+                spectrumData.peakDB -= peakFallSpeed * Time.deltaTime;
+                if (spectrumData.peakDB < -60f) spectrumData.peakDB = -60f;
+            }
+
             float low = 0, mid = 0, high = 0;
             for (int i = 0; i < 12; i++) low += spectrumData.spectrum[i];
             spectrumData.lowBandAvg = low / 12f;
@@ -157,5 +193,8 @@ namespace SmokeMusicPlayer.Audio
             for (int i = 0; i < 512; i++) total += spectrumData.spectrum[i];
             spectrumData.overallAmplitude = total / 512f;
         }
+
+        public float[] GetSmoothSpectrum() => smoothSpectrum;
+
     }
 }
