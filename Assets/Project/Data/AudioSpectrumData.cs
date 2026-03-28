@@ -21,8 +21,8 @@ namespace SmokeMusicPlayer.Data
             highBandAvg = 0f;
             overallAmplitude = 0f;
             rmsValue = 0f;
-            currentDB = -60f;
-            peakDB = -60f;
+            currentDB = -70f;
+            peakDB = -70f;
         }
     }
 }

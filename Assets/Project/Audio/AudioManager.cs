@@ -44,9 +44,19 @@ namespace SmokeMusicPlayer.Audio
         public void ApplyMode(SourceMode mode, string micName = "")
         {
             StopAllModes();
+            initialMode = mode; // Keep enum in sync
+            
             if (mode == SourceMode.Microphone)
             {
                 StartMicrophone(string.IsNullOrEmpty(micName) ? (Microphone.devices.Length > 0 ? Microphone.devices[0] : "") : micName);
+            }
+            else
+            {
+                // File mode: If we already have a clip, resume playing it
+                if (audioSource != null && audioSource.clip != null)
+                {
+                    audioSource.Play();
+                }
             }
         }
 
@@ -76,9 +86,13 @@ namespace SmokeMusicPlayer.Audio
             if (isMicrophoneMode)
             {
                 Microphone.End(activeMicDevice);
+                isMicrophoneMode = false;
+            }
+            
+            if (audioSource != null)
+            {
                 audioSource.Stop();
                 audioSource.mute = false;
-                isMicrophoneMode = false;
             }
         }
 
@@ -167,9 +181,9 @@ namespace SmokeMusicPlayer.Audio
 
             // RMS and DB
             spectrumData.rmsValue = Mathf.Sqrt(sumSquared / spectrumData.spectrum.Length);
-            // Convert to dB, with -60dB floor
-            float db = 20 * Mathf.Log10(Mathf.Max(spectrumData.rmsValue, 0.001f));
-            spectrumData.currentDB = Mathf.Lerp(spectrumData.currentDB, db, Time.deltaTime * 20f);
+            // Higher floor for more dynamic visual range in the meter
+            float db = 20 * Mathf.Log10(Mathf.Max(spectrumData.rmsValue, 0.0003f)); // ~ -70dB
+            spectrumData.currentDB = Mathf.Lerp(spectrumData.currentDB, db, Time.deltaTime * 25f);
             
             // Peak Hold
             if (spectrumData.currentDB > spectrumData.peakDB)
@@ -179,7 +193,7 @@ namespace SmokeMusicPlayer.Audio
             else
             {
                 spectrumData.peakDB -= peakFallSpeed * Time.deltaTime;
-                if (spectrumData.peakDB < -60f) spectrumData.peakDB = -60f;
+                if (spectrumData.peakDB < -70f) spectrumData.peakDB = -70f;
             }
 
             float low = 0, mid = 0, high = 0;

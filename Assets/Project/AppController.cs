@@ -73,18 +73,14 @@ namespace SmokeMusicPlayer
             {
                 float normalizedX = (float)i / (bandsToRender - 1);
                 
-                // Logarithmic frequency mapping. 
-                // Most music energy is in the lower 1/4th of the spectrum array.
-                // normalizedX = 0 -> bin 0
-                // normalizedX = 1 -> bin 255 (out of 511)
-                float power = Mathf.Pow(normalizedX, 2.0f); // stretches lower frequencies across a wider X area
-                int binIndex = Mathf.Clamp(Mathf.RoundToInt(power * 255), 0, 511);
+                // Mapping to binIndex: use 1.5 power to focus less on sub-bass and show more highs
+                float power = Mathf.Pow(normalizedX, 1.5f); 
+                int binIndex = Mathf.Clamp(Mathf.RoundToInt(power * 320), 0, 511);
                 
                 float rawAmplitude = spectrum.spectrum[binIndex];
                 
-                // High frequencies naturally have much lower amplitudes in FFT.
-                // We boost them based on their bin index so they visually match bass.
-                float frequencyBoost = 1.0f + (binIndex * 0.1f); 
+                // Slightly adjusted frequency boost curve for the new power distribution
+                float frequencyBoost = 1.0f + (binIndex * 0.08f); 
                 float chunkAmplitude = rawAmplitude * frequencyBoost;
 
                 if (chunkAmplitude > 0.002f)
@@ -95,11 +91,11 @@ namespace SmokeMusicPlayer
                     Color color;
                     if (currentProfile.useFrequencyToHue)
                     {
-                        // Map frequency bin (0-255) to a hue (0.0 - 1.0)
-                        // Bass is red (0.0), Mid is green (0.33), High is blue (0.66)
-                        float hue = ((float)binIndex / 255f) * currentProfile.colorSensitivity;
-                        hue %= 1.0f; // Wrap hue
-                        color = Color.HSVToRGB(hue, 0.8f, 1.0f);
+                        // Map frequency bin (0-320) to a hue (0.0 - 0.7 to avoid wrap chaos)
+                        // This focuses the colors on the most pleasing part of the spectrum
+                        float hue = ((float)binIndex / 320f) * 0.7f; 
+                        hue = (hue + currentProfile.stereoBalance * 0.1f) % 1.0f; // Subtle hue shift with stereo
+                        color = Color.HSVToRGB(hue, 0.7f, 1.0f);
                     }
                     else if (currentProfile.colorPalette.Count <= 1)
                     {
