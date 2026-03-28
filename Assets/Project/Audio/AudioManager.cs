@@ -162,30 +162,60 @@ namespace SmokeMusicPlayer.Audio
         }
 
         private float[] smoothSpectrum;
+        private float[] perceptualSpectrum;
         private float peakFallSpeed = 30f; // dB per second
+        private float autoGain = 1.0f;
 
         private void CalculateBands()
         {
             if (this == null || spectrumData.spectrum == null) return;
             
-            if (smoothSpectrum == null || smoothSpectrum.Length != spectrumData.spectrum.Length)
-                smoothSpectrum = new float[spectrumData.spectrum.Length];
+            int sampleCount = spectrumData.spectrum.Length;
+            if (smoothSpectrum == null || smoothSpectrum.Length != sampleCount)
+                smoothSpectrum = new float[sampleCount];
+            if (perceptualSpectrum == null || perceptualSpectrum.Length != 64)
+                perceptualSpectrum = new float[64];
 
+            float maxThisFrame = 0.0001f;
             float sumSquared = 0;
-            for (int i = 0; i < spectrumData.spectrum.Length; i++)
+
+            for (int i = 0; i < sampleCount; i++)
             {
-                // Smooth spectrum for UI
-                smoothSpectrum[i] = Mathf.Lerp(smoothSpectrum[i], spectrumData.spectrum[i], Time.deltaTime * 15f);
-                sumSquared += spectrumData.spectrum[i] * spectrumData.spectrum[i];
+                float raw = spectrumData.spectrum[i];
+                smoothSpectrum[i] = Mathf.Lerp(smoothSpectrum[i], raw, Time.deltaTime * 15f);
+                sumSquared += raw * raw;
+                if (raw > maxThisFrame) maxThisFrame = raw;
+            }
+
+            // Update Auto-Gain: slowly adjust to the peak level to keep visuals "full"
+            float targetGain = 1.0f / Mathf.Max(maxThisFrame, 0.01f);
+            autoGain = Mathf.Lerp(autoGain, Mathf.Clamp(targetGain, 1f, 50f), Time.deltaTime * 0.5f);
+
+            // Calculate Perceptual Spectrum (Logarithmic grouping + dB Scaling)
+            int numBands = perceptualSpectrum.Length;
+            for (int i = 0; i < numBands; i++)
+            {
+                float normalized = (float)i / numBands;
+                // Logarithmic mapping from 512 bins to 64 bands
+                int startBin = Mathf.FloorToInt(Mathf.Pow(normalized, 1.5f) * (sampleCount - 1));
+                int endBin = Mathf.FloorToInt(Mathf.Pow((float)(i + 1) / numBands, 1.5f) * (sampleCount - 1));
+                if (endBin <= startBin) endBin = startBin + 1;
+
+                float avg = 0;
+                for (int b = startBin; b < endBin && b < sampleCount; b++) avg += spectrumData.spectrum[b];
+                avg /= (endBin - startBin);
+
+                // Perceptual Scaling: Convert to a "pseudo-dB" 0-1 range for UI
+                float dbValue = 20 * Mathf.Log10(Mathf.Max(avg * autoGain, 0.0001f));
+                float normalizedDb = Mathf.InverseLerp(-60f, 0f, dbValue);
+                perceptualSpectrum[i] = Mathf.Lerp(perceptualSpectrum[i], normalizedDb, Time.deltaTime * 20f);
             }
 
             // RMS and DB
-            spectrumData.rmsValue = Mathf.Sqrt(sumSquared / spectrumData.spectrum.Length);
-            // Higher floor for more dynamic visual range in the meter
-            float db = 20 * Mathf.Log10(Mathf.Max(spectrumData.rmsValue, 0.0003f)); // ~ -70dB
+            spectrumData.rmsValue = Mathf.Sqrt(sumSquared / sampleCount);
+            float db = 20 * Mathf.Log10(Mathf.Max(spectrumData.rmsValue, 0.0003f)); 
             spectrumData.currentDB = Mathf.Lerp(spectrumData.currentDB, db, Time.deltaTime * 25f);
             
-            // Peak Hold
             if (spectrumData.currentDB > spectrumData.peakDB)
             {
                 spectrumData.peakDB = spectrumData.currentDB;
@@ -201,14 +231,16 @@ namespace SmokeMusicPlayer.Audio
             spectrumData.lowBandAvg = low / 12f;
             for (int i = 12; i < 186; i++) mid += spectrumData.spectrum[i];
             spectrumData.midBandAvg = mid / 174f;
-            for (int i = 186; i < 930; i++) high += spectrumData.spectrum[i];
-            spectrumData.highBandAvg = high / 744f;
+            for (int i = 186; i < 930 && i < sampleCount; i++) high += spectrumData.spectrum[i];
+            spectrumData.highBandAvg = high / Mathf.Max(1, (Mathf.Min(930, sampleCount) - 186));
+            
             float total = 0;
-            for (int i = 0; i < 512; i++) total += spectrumData.spectrum[i];
-            spectrumData.overallAmplitude = total / 512f;
+            for (int i = 0; i < Mathf.Min(512, sampleCount); i++) total += spectrumData.spectrum[i];
+            spectrumData.overallAmplitude = total / Mathf.Min(512, sampleCount);
         }
 
         public float[] GetSmoothSpectrum() => smoothSpectrum;
+        public float[] GetPerceptualSpectrum() => perceptualSpectrum;
 
     }
 }

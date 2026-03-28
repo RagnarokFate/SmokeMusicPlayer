@@ -12,6 +12,7 @@ namespace SmokeMusicPlayer.UI
         [SerializeField] private AppController appController; 
         
         public bool showDebugUI = false;
+        public bool showPerceptualSpectrum = true;
         private string[] micDevices;
         private int selectedMicIndex = 0;
         private int currentTab = 0;
@@ -155,6 +156,16 @@ namespace SmokeMusicPlayer.UI
 
             GUILayout.Space(15);
             GUILayout.BeginVertical("box");
+            GUILayout.Label("<b>SPECTRUM VIEW</b>");
+            string modeName = showPerceptualSpectrum ? "PERCEPTUAL (Log/dB)" : "TECHNICAL (Linear)";
+            if (GUILayout.Button($"VIEW: {modeName}", GUILayout.Height(30)))
+            {
+                showPerceptualSpectrum = !showPerceptualSpectrum;
+            }
+            GUILayout.EndVertical();
+
+            GUILayout.Space(10);
+            GUILayout.BeginVertical("box");
             GUILayout.Label("<b>RENDER SETTINGS</b>");
             profile.useFrequencyToHue = GUILayout.Toggle(profile.useFrequencyToHue, " Enable Dynamic Frequency-to-Color");
             
@@ -216,31 +227,50 @@ namespace SmokeMusicPlayer.UI
         private void DrawFrequencyMeter(Rect rect)
         {
             GUI.Box(rect, "");
-            float[] spectrum = audioManager.GetSmoothSpectrum();
-            if (spectrum == null) return;
-
-            int bands = 64;
-            float barWidth = rect.width / bands;
-            for (int i = 0; i < bands; i++)
+            
+            if (showPerceptualSpectrum)
             {
-                // Slightly less aggressive power for more high-end detail
-                float normalized = (float)i / bands;
-                float power = Mathf.Pow(normalized, 1.2f); // Changed from 1.5 to 1.2 to show more spectrum
-                int binIndex = Mathf.Clamp(Mathf.RoundToInt(power * 511), 0, 511);
-
-                // Frequency dependent boost to normalize visual output (highs are quieter in FFT)
-                float freqBoost = 1.0f + (normalized * 4.0f);
-                float amplitude = spectrum[binIndex] * 12f * freqBoost;
-                float barHeight = Mathf.Clamp(amplitude * rect.height, 2, rect.height);
-
-                // Matching smoke color mapping: Hue 0.0 to 0.7
-                float hue = normalized * 0.7f;
-                GUI.color = Color.HSVToRGB(hue, 0.7f, 1.0f);
-                GUI.DrawTexture(new Rect(rect.x + (i * barWidth), rect.y + rect.height - barHeight, barWidth - 1, barHeight), whiteTex);
+                float[] spectrum = audioManager.GetPerceptualSpectrum();
+                if (spectrum == null) return;
+                
+                int bands = spectrum.Length;
+                float barWidth = rect.width / bands;
+                for (int i = 0; i < bands; i++)
+                {
+                    float normalized = (float)i / bands;
+                    float barHeight = Mathf.Clamp(spectrum[i] * rect.height, 2, rect.height);
+                    
+                    GUI.color = Color.HSVToRGB(normalized * 0.7f, 0.7f, 1.0f);
+                    GUI.DrawTexture(new Rect(rect.x + (i * barWidth), rect.y + rect.height - barHeight, barWidth - 1, barHeight), whiteTex);
+                }
             }
+            else
+            {
+                float[] spectrum = audioManager.GetSmoothSpectrum();
+                if (spectrum == null) return;
+
+                int bands = 64;
+                float barWidth = rect.width / bands;
+                for (int i = 0; i < bands; i++)
+                {
+                    float normalized = (float)i / bands;
+                    float power = Mathf.Pow(normalized, 1.2f); 
+                    int binIndex = Mathf.Clamp(Mathf.RoundToInt(power * 511), 0, 511);
+
+                    float freqBoost = 1.0f + (normalized * 4.0f);
+                    float amplitude = spectrum[binIndex] * 12f * freqBoost;
+                    float barHeight = Mathf.Clamp(amplitude * rect.height, 2, rect.height);
+
+                    GUI.color = Color.HSVToRGB(normalized * 0.7f, 0.7f, 1.0f);
+                    GUI.DrawTexture(new Rect(rect.x + (i * barWidth), rect.y + rect.height - barHeight, barWidth - 1, barHeight), whiteTex);
+                }
+            }
+
             GUI.color = Color.white;
-            GUI.Label(new Rect(rect.x, rect.y + rect.height + 2, 50, 20), "<size=9>20Hz</size>");
-            GUI.Label(new Rect(rect.x + rect.width - 50, rect.y + rect.height + 2, 50, 20), "<size=9>20kHz</size>");
+            string lowLabel = showPerceptualSpectrum ? "Deep Bass" : "20Hz";
+            string highLabel = showPerceptualSpectrum ? "High Treble" : "20kHz";
+            GUI.Label(new Rect(rect.x, rect.y + rect.height + 2, 80, 20), $"<size=9>{lowLabel}</size>");
+            GUI.Label(new Rect(rect.x + rect.width - 80, rect.y + rect.height + 2, 80, 20), $"<size=9 align=right>{highLabel}</size>");
         }
 
         private void DrawDBMeter(Rect rect, AudioSpectrumData data)
